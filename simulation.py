@@ -150,7 +150,7 @@ def draw_ghost(surf, pts):
             pygame.draw.line(surf, (100, 100, 200), p1, p2, 1)
 
 
-def draw_panel(surf, angle, vel, gravity, air_resistance, stats, show_trail, show_ghost):
+def draw_panel(surf, angle, vel, gravity, drag, stats, show_trail, show_ghost):
     panel_x = WIDTH - 210
     pygame.draw.rect(surf, PANEL_COL, (panel_x - 8, 0, 218, HEIGHT))
     pygame.draw.line(surf, BORDER_COL, (panel_x - 8, 0), (panel_x - 8, HEIGHT), 1)
@@ -162,10 +162,10 @@ def draw_panel(surf, angle, vel, gravity, air_resistance, stats, show_trail, sho
 
     # Parameters
     params = [
-        ("Angle",    f"{angle:.0f} deg",   "[<-] / [->]"),
+        ("Angle",    f"{angle:.0f} deg",   "[ ] / [ ]"),
         ("Velocity", f"{vel:.0f} m/s",     "A / D"),
         ("Gravity",  f"{gravity:.1f} m/s2","W / S"),
-        ("Air Resistance", f"{air_resistance:.3f}", "Z / X"),
+        ("Drag",     f"{drag:.3f}",        "Z / X"),
     ]
     for label, val, keys in params:
         pygame.draw.rect(surf, (28, 33, 50), (panel_x - 4, y - 2, 206, 38), border_radius=6)
@@ -196,8 +196,8 @@ def draw_panel(surf, angle, vel, gravity, air_resistance, stats, show_trail, sho
 
     # Toggles & keys
     controls = [
-        (f"[T]Trail: {'ON' if show_trail else 'OFF'}", show_trail),
-        (f"[G]Ghost(Path With No Drag): {'ON' if show_ghost else 'OFF'}", show_ghost),
+        (f"[T] Trail: {'ON' if show_trail else 'OFF'}", show_trail),
+        (f"[G] No Drag Path: {'ON' if show_ghost else 'OFF'}", show_ghost),
     ]
     for txt, active in controls:
         col = (100, 200, 120) if active else (120, 120, 130)
@@ -235,7 +235,7 @@ def main():
     angle   = 45.0
     vel     = 60.0
     gravity = 9.8
-    air_resistance = 0.0
+    drag    = 0.0
     show_trail = True
     show_ghost = False
 
@@ -253,7 +253,7 @@ def main():
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     running = False
                 if event.key == pygame.K_SPACE:
-                    pts = simulate(angle, vel, gravity, air_resistance)
+                    pts = simulate(angle, vel, gravity, drag)
                     stats = compute_stats(pts)
                     if len(balls) > 6:
                         balls.pop(0)
@@ -274,8 +274,8 @@ def main():
         if keys[pygame.K_d]: vel     = min(120, vel + 0.5)
         if keys[pygame.K_s]: gravity = max(1,   gravity - 0.05)
         if keys[pygame.K_w]: gravity = min(25,  gravity + 0.05)
-        if keys[pygame.K_z]: air_resistance = max(0,   air_resistance - 0.001)
-        if keys[pygame.K_x]: air_resistance = min(0.05, air_resistance + 0.001)
+        if keys[pygame.K_z]: drag    = max(0,   drag - 0.001)
+        if keys[pygame.K_x]: drag    = min(0.05, drag + 0.001)
 
         # Advance ball animations
         for ball in balls:
@@ -297,7 +297,7 @@ def main():
             draw_ball(screen, ball)
 
         draw_cannon(screen, angle)
-        draw_panel(screen, angle, vel, gravity, air_resistance, stats, show_trail, show_ghost)
+        draw_panel(screen, angle, vel, gravity, drag, stats, show_trail, show_ghost)
 
         pygame.display.flip()
 
