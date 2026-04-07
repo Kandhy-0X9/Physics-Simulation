@@ -1,0 +1,303 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: transparent; }
+  #root { display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
+  canvas { display: block; width: 100%; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); background: #0a0e1a; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ctrl-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 16px; }
+  .ctrl-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .ctrl-label span { font-weight: 500; color: var(--color-text-primary); }
+  input[type=range] { width: 100%; }
+  .btn-row { display: flex; gap: 8px; }
+  button { flex: 1; padding: 8px 0; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); font-size: 13px; cursor: pointer; }
+  button:hover { background: var(--color-background-secondary); }
+  button.fire { background: #c84b2a; color: #fff; border-color: #c84b2a; font-weight: 500; }
+  button.fire:hover { background: #a83a1e; }
+  .stats-row { display: flex; gap: 8px; }
+  .stat { flex: 1; background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 8px 12px; }
+  .stat-label { font-size: 11px; color: var(--color-text-secondary); }
+  .stat-value { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin-top: 2px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--color-text-secondary); }
+</style>
+
+<div id="root">
+  <canvas id="c" height="340"></canvas>
+  <div class="controls">
+    <div class="ctrl-card">
+      <div class="ctrl-label">Angle <span id="lbl-angle">45°</span></div>
+      <input type="range" id="s-angle" min="1" max="89" value="45" step="1">
+    </div>
+    <div class="ctrl-card">
+      <div class="ctrl-label">Velocity <span id="lbl-vel">60 m/s</span></div>
+      <input type="range" id="s-vel" min="10" max="120" value="60" step="1">
+    </div>
+    <div class="ctrl-card">
+      <div class="ctrl-label">Gravity <span id="lbl-g">9.8 m/s²</span></div>
+      <input type="range" id="s-g" min="1" max="25" value="9.8" step="0.1">
+    </div>
+    <div class="ctrl-card">
+      <div class="ctrl-label">Air resistance <span id="lbl-drag">0.00</span></div>
+      <input type="range" id="s-drag" min="0" max="0.05" value="0" step="0.001">
+    </div>
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-label">Max height</div><div class="stat-value" id="st-h">—</div></div>
+    <div class="stat"><div class="stat-label">Range</div><div class="stat-value" id="st-r">—</div></div>
+    <div class="stat"><div class="stat-label">Flight time</div><div class="stat-value" id="st-t">—</div></div>
+    <div class="stat"><div class="stat-label">Impact speed</div><div class="stat-value" id="st-v">—</div></div>
+  </div>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+    <label class="checkbox-row"><input type="checkbox" id="chk-trail" checked> Show trail</label>
+    <label class="checkbox-row"><input type="checkbox" id="chk-ghost"> Show ideal path</label>
+    <div class="btn-row" style="flex:1; max-width:240px;">
+      <button id="btn-clear">Clear</button>
+      <button class="fire" id="btn-fire">Fire!</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = () => canvas.width;
+const H = () => canvas.height;
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * devicePixelRatio;
+  canvas.height = 340 * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+}
+resize();
+window.addEventListener('resize', () => { resize(); draw(); });
+
+const SCALE = 3;
+const GROUND_Y = 290;
+const CANNON_X = 60;
+const CANNON_Y = GROUND_Y - 18;
+
+let angle = 45, vel = 60, gravity = 9.8, drag = 0;
+let balls = [];
+let animId = null;
+let showTrail = true, showGhost = false;
+
+function getParams() {
+  return { angle, vel, gravity, drag };
+}
+
+function simulate(a, v, g, k, steps = 3000, dt = 0.05) {
+  const rad = a * Math.PI / 180;
+  let vx = v * Math.cos(rad), vy = v * Math.sin(rad);
+  let x = 0, y = 0;
+  const pts = [[x, y]];
+  for (let i = 0; i < steps; i++) {
+    const speed = Math.sqrt(vx*vx + vy*vy);
+    vx -= k * speed * vx * dt;
+    vy -= k * speed * vy * dt;
+    vy -= g * dt;
+    x += vx * dt;
+    y += vy * dt;
+    pts.push([x, y]);
+    if (y < 0 && i > 0) {
+      const t = pts[pts.length-2];
+      const frac = -t[1] / (y - t[1]);
+      pts[pts.length-1] = [t[0] + frac*(x-t[0]), 0];
+      break;
+    }
+  }
+  const maxH = Math.max(...pts.map(p => p[1]));
+  const range = pts[pts.length-1][0];
+  const time = pts.length * dt;
+  const lastPt = pts[pts.length-1];
+  const prevPt = pts[pts.length-2];
+  const impVx = (lastPt[0] - prevPt[0]) / dt;
+  const impVy = (lastPt[1] - prevPt[1]) / dt;
+  const impSpeed = Math.sqrt(impVx*impVx + impVy*impVy);
+  return { pts, maxH, range, time, impSpeed };
+}
+
+function worldToScreen(x, y) {
+  return [CANNON_X + x * SCALE, GROUND_Y - y * SCALE];
+}
+
+function drawGround() {
+  ctx.fillStyle = '#1a2a14';
+  ctx.fillRect(0, GROUND_Y, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio - GROUND_Y);
+  ctx.strokeStyle = '#2d4a22';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND_Y);
+  ctx.lineTo(canvas.width / devicePixelRatio, GROUND_Y);
+  ctx.stroke();
+}
+
+function drawCannon(a) {
+  const rad = a * Math.PI / 180;
+  const len = 36, w = 10;
+  ctx.save();
+  ctx.translate(CANNON_X, CANNON_Y);
+  ctx.rotate(-rad);
+  ctx.fillStyle = '#8a7560';
+  ctx.strokeStyle = '#5a4a38';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(-4, -w/2, len, w);
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#5a4a38';
+  ctx.beginPath();
+  ctx.arc(CANNON_X, CANNON_Y, 14, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#c8a870';
+  ctx.beginPath();
+  ctx.arc(CANNON_X, CANNON_Y, 10, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#3a2a18';
+  ctx.fillRect(CANNON_X - 16, CANNON_Y + 12, 32, 10);
+  ctx.beginPath();
+  ctx.arc(CANNON_X - 16, CANNON_Y + 14, 6, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(CANNON_X + 16, CANNON_Y + 14, 6, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawGhostPath(a, v, g) {
+  const { pts } = simulate(a, v, g, 0);
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(180,180,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => {
+    const [sx, sy] = worldToScreen(x, y);
+    i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBall(ball) {
+  const { pts, head, trail } = ball;
+  if (showTrail && pts.length > 1) {
+    for (let i = Math.max(0, head - 120); i < head - 1; i++) {
+      const [x1, y1] = worldToScreen(pts[i][0], pts[i][1]);
+      const [x2, y2] = worldToScreen(pts[i+1][0], pts[i+1][1]);
+      const alpha = (i - (head - 121)) / 120;
+      ctx.strokeStyle = `rgba(255,160,60,${alpha * 0.6})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+  }
+  if (!ball.done) {
+    const [sx, sy] = worldToScreen(pts[head][0], pts[head][1]);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#888';
+    ctx.beginPath(); ctx.arc(sx-2, sy-2, 3, 0, Math.PI*2); ctx.fill();
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, 7);
+    grad.addColorStop(0, 'rgba(255,180,80,0.4)');
+    grad.addColorStop(1, 'rgba(255,80,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(sx, sy, 14, 0, Math.PI*2); ctx.fill();
+  } else {
+    const [sx, sy] = worldToScreen(pts[pts.length-1][0], pts[pts.length-1][1]);
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(sx, sy+3, 7, 0, Math.PI); ctx.fill();
+  }
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < canvas.width/devicePixelRatio; x += 50) {
+    ctx.beginPath(); ctx.moveTo(CANNON_X + x, 0); ctx.lineTo(CANNON_X + x, GROUND_Y); ctx.stroke();
+  }
+  for (let y = GROUND_Y; y > 0; y -= 50) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width/devicePixelRatio, y); ctx.stroke();
+  }
+}
+
+function drawStats(ball) {
+  if (!ball) return;
+  const { maxH, range, time, impSpeed } = ball.meta;
+  document.getElementById('st-h').textContent = maxH.toFixed(1) + ' m';
+  document.getElementById('st-r').textContent = range.toFixed(1) + ' m';
+  document.getElementById('st-t').textContent = time.toFixed(2) + ' s';
+  document.getElementById('st-v').textContent = impSpeed.toFixed(1) + ' m/s';
+}
+
+function clearStats() {
+  ['st-h','st-r','st-t','st-v'].forEach(id => document.getElementById(id).textContent = '—');
+}
+
+function draw() {
+  const cw = canvas.width / devicePixelRatio;
+  const ch = canvas.height / devicePixelRatio;
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#0a0e1a';
+  ctx.fillRect(0, 0, cw, ch);
+  drawGrid();
+  drawGround();
+  if (showGhost) drawGhostPath(angle, vel, gravity);
+  balls.forEach(b => drawBall(b));
+  drawCannon(angle);
+}
+
+function animate() {
+  let anyActive = false;
+  balls.forEach(ball => {
+    if (!ball.done) {
+      ball.head = Math.min(ball.head + 3, ball.pts.length - 1);
+      if (ball.head >= ball.pts.length - 1) ball.done = true;
+      anyActive = true;
+    }
+  });
+  draw();
+  if (balls.length > 0) drawStats(balls[balls.length - 1]);
+  if (anyActive) animId = requestAnimationFrame(animate);
+}
+
+function fire() {
+  const { pts, maxH, range, time, impSpeed } = simulate(angle, vel, gravity, drag);
+  if (balls.length > 5) balls.shift();
+  balls.push({ pts, head: 0, done: false, meta: { maxH, range, time, impSpeed } });
+  if (animId) cancelAnimationFrame(animId);
+  animate();
+}
+
+function bindSlider(id, lblId, key, fmt) {
+  const el = document.getElementById(id);
+  const lbl = document.getElementById(lblId);
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    if (key === 'angle') angle = v;
+    else if (key === 'vel') vel = v;
+    else if (key === 'gravity') gravity = v;
+    else if (key === 'drag') drag = v;
+    lbl.textContent = fmt(v);
+    draw();
+  });
+}
+
+bindSlider('s-angle', 'lbl-angle', 'angle', v => v + '°');
+bindSlider('s-vel', 'lbl-vel', 'vel', v => v + ' m/s');
+bindSlider('s-g', 'lbl-g', 'gravity', v => v + ' m/s²');
+bindSlider('s-drag', 'lbl-drag', 'drag', v => v.toFixed(3));
+
+document.getElementById('btn-fire').addEventListener('click', fire);
+document.getElementById('btn-clear').addEventListener('click', () => {
+  balls = [];
+  if (animId) cancelAnimationFrame(animId);
+  draw();
+  clearStats();
+});
+document.getElementById('chk-trail').addEventListener('change', e => { showTrail = e.target.checked; draw(); });
+document.getElementById('chk-ghost').addEventListener('change', e => { showGhost = e.target.checked; draw(); });
+
+draw();
+</script>
