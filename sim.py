@@ -3,8 +3,9 @@ import math
 
 # Set up display
 WIDTH, HEIGHT = 1200, 720
-# Colors
+# Color
 BG = ("white")
+
 pygame.init() # Initialize Pygame
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Cannon Physics Simulation")
@@ -16,5 +17,3 @@ while running:
     
     screen.fill(BG)
     pygame.display.flip()
-
-pygame.quit() # Quit Pygame
