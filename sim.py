@@ -43,11 +43,15 @@ fontTittle = pygame.font.SysFont("monospace", 22, bold=True)  # Title font
 def simulate():
     print("nothing in here")
 
-def drawGrid():
-    print("nothing in here")
+def drawGrid(surf):
+    for x in range(0, WIDTH, 60): # verticle lines
+        pygame.draw.line(surf, (30, 35, 55), (x, 0), (x, groundY))
+    for y in range(groundY, 0, -60): # horizontal lines
+        pygame.draw.line(surf, (30, 35, 55), (0, y), (WIDTH, y))
 
-def drawGround():
-    print("nothing in here")
+def drawGround(surf):
+    pygame.draw.rect(surf, groundColor, (0, groundY, WIDTH, HEIGHT - groundY))
+    pygame.draw.line(surf, grassColor, (0, groundY), (WIDTH, groundY), 2)   
 
 def drawCannon():
     print("nothing in here")
@@ -74,6 +78,8 @@ def main():
                     running = False
         # Draw scene EVERY FRAME
         screen.fill(BG)
+        drawGrid(screen)
+        drawGround(screen)
         # Update display
         pygame.display.flip()
     pygame.quit()
